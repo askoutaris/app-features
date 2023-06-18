@@ -21,6 +21,8 @@ namespace AppFeatures.Extensions.DependencyInjection
 
 			RegisterManager(services, features, syncInterval);
 
+			services.AddHostedService<AppFeaturesHostedService>();
+
 			return services;
 		}
 
