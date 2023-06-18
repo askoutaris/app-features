@@ -14,13 +14,10 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<PackageReference Include="AppFeatures" Version="1.0.0" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
 		<PackageReference Include="StackExchange.Redis" Version="2.6.116" />
 		<PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="7.0.0" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <ProjectReference Include="..\AppFeatures\AppFeatures.csproj" />
 	</ItemGroup>
 
 </Project>

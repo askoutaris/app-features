@@ -13,7 +13,7 @@ namespace Workbench
 	{
 		static async Task Main(string[] args)
 		{
-			var multiplexer = ConnectionMultiplexer.Connect("stg-redis-01.stg-novibet.systems:26381,stg-redis-02.stg-novibet.systems:26381,stg-redis-03.stg-novibet.systems:26381,defaultDatabase=14,password=RedisMaster1234!,serviceName=sbredis,allowAdmin=true");
+			var multiplexer = ConnectionMultiplexer.Connect("redis-connection-string");
 
 			var customerFeauture = new CustomerRegistrationFeature(
 				enabled: true,
