@@ -122,26 +122,23 @@ namespace AppFeatures
 		{
 			_syncTimer?.Change(Timeout.Infinite, Timeout.Infinite);
 
-			Task.Run(async () =>
+			try
 			{
-				try
-				{
-					await LoadFeatures();
+				LoadFeatures().GetAwaiter().GetResult();
 
-					await _repository.Update(_pendingUpdatedFeatures.Values.ToArray());
+				_repository.Update(_pendingUpdatedFeatures.Values.ToArray()).GetAwaiter().GetResult();
 
-					foreach (var feature in _pendingUpdatedFeatures.Values)
-						_logger.LogDebug($"OnSyncTimerTick: Feature updated {feature.ToJson()}");
+				foreach (var feature in _pendingUpdatedFeatures.Values)
+					_logger.LogDebug($"OnSyncTimerTick: Feature updated {feature.ToJson()}");
 
-					_pendingUpdatedFeatures.Clear();
+				_pendingUpdatedFeatures.Clear();
 
-					_logger.LogDebug($"OnSyncTimerTick");
-				}
-				catch (Exception ex)
-				{
-					_logger.LogError(ex, ex.Message);
-				}
-			}).GetAwaiter().GetResult();
+				_logger.LogDebug($"OnSyncTimerTick");
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, ex.Message);
+			}
 
 			_syncTimer?.Change(_syncInterval, _syncInterval);
 		}
