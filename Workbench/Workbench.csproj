@@ -10,9 +10,9 @@
 		<PackageReference Include="AppFeatures" Version="1.0.0" />
 		<PackageReference Include="AppFeatures.Extensions.DependencyInjection" Version="1.0.1" />
 		<PackageReference Include="AppFeatures.Providers.Redis" Version="1.0.0" />
-		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="7.0.0" />
-		<PackageReference Include="Microsoft.Extensions.Logging" Version="7.0.0" />
-		<PackageReference Include="Microsoft.Extensions.Logging.Console" Version="7.0.0" />
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
 		<PackageReference Include="RedisIndexer.Extensions.DependencyInjection" Version="1.0.1" />
 	</ItemGroup>
 
