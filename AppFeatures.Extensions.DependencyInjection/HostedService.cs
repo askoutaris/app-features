@@ -1,5 +1,4 @@
-﻿using System;
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 
@@ -21,7 +20,9 @@ namespace AppFeatures.Extensions.DependencyInjection
 
 		public Task StopAsync(CancellationToken cancellationToken)
 		{
-			throw new NotImplementedException();
+			_manager.Stop();
+
+			return Task.CompletedTask;
 		}
 	}
 }

@@ -6,41 +6,37 @@ namespace AppFeatures
 {
 	public interface IFeaturesRepository
 	{
-		Task<ICollection<Feature>> Get(params string[] keys);
-		Task Add(params Feature[] features);
-		Task Update(params Feature[] features);
+		Task<ICollection<FeatureData>> GetAll();
+		Task Add(FeatureData feature);
+		Task Update(FeatureData feature);
 	}
 
 	public class InMemoryRepository : IFeaturesRepository
 	{
-		private readonly Dictionary<string, Feature> _features;
+		private readonly Dictionary<string, FeatureData> _features;
 
 		public InMemoryRepository()
 		{
-			_features = new Dictionary<string, Feature>();
+			_features = [];
 		}
 
-		public Task Add(Feature[] features)
+		public Task Add(FeatureData feature)
 		{
-			foreach (var feature in features)
-				_features[feature.Key] = feature;
+			_features[feature.Key] = feature;
 
 			return Task.CompletedTask;
 		}
 
-		public Task<ICollection<Feature>> Get(string[] keys)
+		public Task<ICollection<FeatureData>> GetAll()
 		{
-			var features = _features.Values
-				.Where(x => keys.Contains(x.Key))
-				.ToArray();
+			var features = _features.Values.ToArray();
 
-			return Task.FromResult((ICollection<Feature>)features);
+			return Task.FromResult((ICollection<FeatureData>)features);
 		}
 
-		public Task Update(params Feature[] features)
+		public Task Update(FeatureData feature)
 		{
-			foreach (var feature in features)
-				_features[feature.Key] = feature;
+			_features[feature.Key] = feature;
 
 			return Task.CompletedTask;
 		}

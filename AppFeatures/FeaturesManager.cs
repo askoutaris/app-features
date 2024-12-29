@@ -10,41 +10,38 @@ namespace AppFeatures
 	public interface IFeaturesManager
 	{
 		Task Init();
-		Feature GetFeature(string key);
+		void Stop();
 		void UpdateFeature(object feature);
 	}
 
 	public class FeaturesManager : IFeaturesManager
 	{
-		private readonly IReadOnlyDictionary<string, Feature> _defaultFeatures;
-		private Dictionary<string, Feature> _features;
-		private Dictionary<string, Feature> _pendingUpdatedFeatures;
+		private readonly object _sync = new object();
+		private readonly IServiceProvider _services;
+		private readonly IEnumerable<IFeatureBuilder> _featureBuilders;
+		private readonly IFeaturesStore _store;
+		private readonly Dictionary<string, FeatureData> _updatedFeatures;
 
 		private readonly IFeaturesRepository _repository;
-		private readonly IFeaturesBuilder _builder;
 		private readonly TimeSpan _syncInterval;
 		private readonly ILogger<IFeaturesManager> _logger;
 		private Timer? _syncTimer = null;
 
 		public FeaturesManager(
-			IReadOnlyDictionary<string, Feature> defaultFeatures,
+			IServiceProvider services,
+			IEnumerable<IFeatureBuilder> featureBuilders,
+			IFeaturesStore store,
 			IFeaturesRepository repository,
-			IFeaturesBuilder builder,
 			TimeSpan syncInterval,
 			ILogger<IFeaturesManager> logger)
 		{
 			_repository = repository;
 			_logger = logger;
-			_builder = builder;
 			_syncInterval = syncInterval;
-			_defaultFeatures = defaultFeatures;
-			_features = new Dictionary<string, Feature>();
-			_pendingUpdatedFeatures = new Dictionary<string, Feature>();
-		}
-
-		public Feature GetFeature(string key)
-		{
-			return _features[key];
+			_services = services;
+			_featureBuilders = featureBuilders;
+			_store = store;
+			_updatedFeatures = [];
 		}
 
 		public async Task Init()
@@ -54,17 +51,24 @@ namespace AppFeatures
 			_syncTimer = new Timer(OnSyncTimerTick, null, _syncInterval, _syncInterval);
 		}
 
+		public void Stop()
+		{
+			_syncTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+		}
+
 		public void UpdateFeature(object value)
 		{
-			var key = _builder.GetFeatureKey(value.GetType());
+			lock (_sync)
+			{
+				var key = value.GetType().ToFeatureKey();
 
-			if (!_features.ContainsKey(key))
-				throw new Exception($"UpdateFeature: Feature {key} has not been registered, hence you cannot update it");
+				if (!_store.Contains(key))
+					throw new Exception($"No registered feature for {value.GetType().FullName}");
 
-			var feature = _builder.CreateFeature(key, value);
+				var feature = new FeatureData(key, value);
 
-			_features[key] = feature;
-			_pendingUpdatedFeatures[feature.Key] = feature;
+				_updatedFeatures[feature.Key] = feature;
+			}
 		}
 
 		private async Task SyncFeatures()
@@ -76,46 +80,33 @@ namespace AppFeatures
 
 		private async Task AddNewFeatures()
 		{
-			var newFeatures = _defaultFeatures
-				.Where(x => !_features.ContainsKey(x.Key))
-				.Select(x => x.Value)
+			var features = _featureBuilders
+				.Select(x => x.BuildFeature(_services))
 				.ToArray();
 
-			await _repository.Add(newFeatures);
-
-			foreach (var feature in newFeatures)
+			foreach (var feature in features)
 			{
-				_features.Add(feature.Key, feature);
+				if (!_store.Contains(feature.Key))
+				{
+					await _repository.Add(feature);
 
-				_logger.LogDebug($"AddNewFeatures: Feature added {feature.ToJson()}");
+					_store.Set(feature);
+
+					_logger.LogInformation($"Feature added {feature.ToJson()}");
+				}
 			}
 		}
 
 		private async Task LoadFeatures()
 		{
-			string[] keys = GetAllFeatureKeys();
+			var entries = await _repository.GetAll();
 
-			var entries = await _repository.Get(keys);
-
-			var features = new Dictionary<string, Feature>(entries.Count);
 			foreach (var feature in entries)
 			{
-				if (!features.ContainsKey(feature.Key))
-				{
-					features.Add(feature.Key, feature);
+				_store.Set(feature);
 
-					_logger.LogDebug($"LoadFeatures: Feature loaded {feature.ToJson()}");
-				}
-				else
-					_logger.LogWarning($"LoadFeatures: Duplicate feature {feature.Key} skipped");
+				_logger.LogInformation($"Feature loaded {feature.ToJson()}");
 			}
-
-			_features = features;
-		}
-
-		private string[] GetAllFeatureKeys()
-		{
-			return _defaultFeatures.Keys.ToArray();
 		}
 
 		private void OnSyncTimerTick(object state)
@@ -124,16 +115,11 @@ namespace AppFeatures
 
 			try
 			{
+				EnsureFeatures();
+
+				UpdateFeatures();
+
 				LoadFeatures().GetAwaiter().GetResult();
-
-				_repository.Update(_pendingUpdatedFeatures.Values.ToArray()).GetAwaiter().GetResult();
-
-				foreach (var feature in _pendingUpdatedFeatures.Values)
-					_logger.LogDebug($"OnSyncTimerTick: Feature updated {feature.ToJson()}");
-
-				_pendingUpdatedFeatures.Clear();
-
-				_logger.LogDebug($"OnSyncTimerTick");
 			}
 			catch (Exception ex)
 			{
@@ -141,6 +127,45 @@ namespace AppFeatures
 			}
 
 			_syncTimer?.Change(_syncInterval, _syncInterval);
+		}
+
+		private void EnsureFeatures()
+		{
+			var entries = _repository.GetAll().GetAwaiter().GetResult();
+
+			var features = _store.GetAll();
+
+			foreach (var feature in features)
+			{
+				if (!entries.Any(x => x.Key == feature.Key))
+				{
+					_repository.Add(feature).GetAwaiter().GetResult();
+
+					_logger.LogWarning($"Missing feature detected and will be readded {feature.ToJson()}");
+				}
+			}
+		}
+
+		private void UpdateFeatures()
+		{
+			lock (_sync)
+			{
+				foreach (var feature in _updatedFeatures.Values.ToArray())
+				{
+					try
+					{
+						_repository.Update(feature).GetAwaiter().GetResult();
+
+						_updatedFeatures.Remove(feature.Key);
+
+						_logger.LogInformation($"Feature updated {feature.ToJson()}");
+					}
+					catch (Exception ex)
+					{
+						_logger.LogError(ex, feature.ToJson());
+					}
+				}
+			}
 		}
 	}
 }

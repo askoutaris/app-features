@@ -2,10 +2,10 @@
 using System.Threading.Tasks;
 using AppFeatures;
 using AppFeatures.Extensions.DependencyInjection;
-using AppFeatures.Providers.Redis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
+using AppFeatures.Providers.Redis;
 
 namespace Workbench
 {
@@ -13,15 +13,9 @@ namespace Workbench
 	{
 		static async Task Main(string[] args)
 		{
-			var multiplexer = ConnectionMultiplexer.Connect("redis-connection-string");
+			var multiplexer = ConnectionMultiplexer.Connect("your-redis-connection-string");
 
-			var customerFeauture = new CustomerRegistrationFeature(
-				enabled: true,
-				minAge: 18);
-
-			var archivingFeauture = new ArchivingFeature(
-				enabled: true,
-				cutoffDate: DateTime.UtcNow.AddDays(-30));
+			var syncInterval = TimeSpan.FromSeconds(5);
 
 			// setup our DI
 			var serviceProvider = new ServiceCollection()
@@ -33,29 +27,27 @@ namespace Workbench
 				})
 				//.AddAppFeaturesProviderInMemory()
 				.AddAppFeaturesProviderRedis()
-				.AddAppFeatures(
-					syncInterval: TimeSpan.FromSeconds(10),
-					x =>
-					 {
-						 x.AddFeature(customerFeauture);
-						 x.AddFeature(archivingFeauture);
-					 })
+				.AddAppFeatures(syncInterval: syncInterval)
+					.AddFeature(services => new CustomerRegistrationFeature(enabled: true, minAge: 18))
+					.AddFeature(services => new ArchivingFeature(enabled: true, cutoffDate: DateTime.UtcNow.AddDays(-30)))
 				.BuildServiceProvider();
 
 			var manager = serviceProvider.GetService<IFeaturesManager>();
 
 			await manager.Init();
 
-			var customerFeautureValue = serviceProvider.GetRequiredService<CustomerRegistrationFeature>();
-			var archivingFeautureValue = serviceProvider.GetRequiredService<ArchivingFeature>();
+			var customerFeatureValue = serviceProvider.GetRequiredService<IFeature<CustomerRegistrationFeature>>();
+			var archivingFeatureValue = serviceProvider.GetRequiredService<IFeatureSnapshot<ArchivingFeature>>();
 
-			var customerFeautureUpdated = new CustomerRegistrationFeature(
+			var customerFeatureUpdated = new CustomerRegistrationFeature(
 				enabled: true,
 				minAge: 19);
 
-			manager.UpdateFeature(customerFeautureUpdated);
+			manager.UpdateFeature(customerFeatureUpdated);
 
-			var customerFeautureValueUpdated = serviceProvider.GetRequiredService<CustomerRegistrationFeature>();
+			await Task.Delay(syncInterval * 2);
+
+			var customerFeatureValueUpdated = serviceProvider.GetRequiredService<IFeature<CustomerRegistrationFeature>>();
 
 			Console.ReadLine();
 		}

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using StackExchange.Redis;
 
@@ -8,69 +9,68 @@ namespace AppFeatures.Providers.Redis
 {
 	public class RedisRepository : IFeaturesRepository
 	{
+		private const string _hashsetKey = "AppFeatures";
 		private readonly JsonSerializerSettings _serializerSettings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Objects };
 		private readonly IConnectionMultiplexer _multiplexer;
+		private readonly ILogger<RedisRepository> _logger;
+
 		private IDatabase _db => _multiplexer.GetDatabase();
 
-		public RedisRepository(IConnectionMultiplexer multiplexer)
+		public RedisRepository(IConnectionMultiplexer multiplexer, ILogger<RedisRepository> logger)
 		{
 			_multiplexer = multiplexer;
+			_logger = logger;
 		}
 
-		public async Task Add(Feature[] features)
+		public async Task<ICollection<FeatureData>> GetAll()
 		{
-			foreach (var feature in features)
-				await SetFeature(feature);
-		}
+			var fields = await _db.HashGetAllAsync(_hashsetKey);
 
-		public async Task<ICollection<Feature>> Get(string[] keys)
-		{
-			var features = new List<Feature>(keys.Length);
-			foreach (var key in keys)
+			var features = new List<FeatureData>(fields.Length);
+
+			foreach (var field in fields)
 			{
-				var redisKey = GetRedisKey(key);
-				var redisValue = await _db.StringGetAsync(redisKey);
-
-				if (redisValue.HasValue)
+				try
 				{
-					var json = redisValue.ToString();
-					var feature = Deserialize(json);
+					if (field.Value.IsNull)
+						throw new Exception("Null value detected");
+
+					var feature = Deserialize(field.Value!);
+
 					features.Add(feature);
+				}
+				catch (Exception ex)
+				{
+					_logger.LogError(ex, $"Deserialization error - feature will be deleted from redis key:{field.Name} value:{field.Value}");
+
+					await _db.HashDeleteAsync(_hashsetKey, field.Name);
 				}
 			}
 
 			return features;
 		}
 
-		public async Task Remove(string[] keys)
+		public async Task Add(FeatureData feature)
 		{
-			foreach (var key in keys)
-			{
-				var redisKey = GetRedisKey(key);
-				await _db.KeyDeleteAsync(redisKey);
-			}
+			await SetFeature(feature);
 		}
 
-		public async Task Update(params Feature[] features)
+		public async Task Update(FeatureData feature)
 		{
-			foreach (var feature in features)
-				await SetFeature(feature);
+			await SetFeature(feature);
 		}
 
-		private async Task SetFeature(Feature feature)
+		private async Task SetFeature(FeatureData feature)
 		{
-			var redisKey = GetRedisKey(feature.Key);
 			var json = Serialize(feature);
-			await _db.StringSetAsync(redisKey, json);
+
+			await _db.HashSetAsync(_hashsetKey, feature.Key, json);
 		}
 
-		private string Serialize(Feature feature)
+		private string Serialize(FeatureData feature)
 			=> JsonConvert.SerializeObject(feature, _serializerSettings);
 
-		private Feature Deserialize(string json)
-			=> JsonConvert.DeserializeObject<Feature>(json, _serializerSettings) ?? throw new Exception($"Invalid json: {json}");
-
-		private string GetRedisKey(string key)
-			=> $"AppFeatures.{key}";
+		private FeatureData Deserialize(string json)
+			=> JsonConvert.DeserializeObject<FeatureData>(json, _serializerSettings) ?? throw new Exception($"Invalid json: {json}");
 	}
 }

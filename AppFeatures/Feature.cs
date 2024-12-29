@@ -1,14 +1,17 @@
 ﻿namespace AppFeatures
 {
-	public class Feature
+	public interface IFeature<T>
 	{
-		public string Key { get; }
-		public object Value { get; }
+		T Value { get; }
+	}
 
-		public Feature(string key, object value)
+	public class Feature<T> : IFeature<T>
+	{
+		public T Value { get; }
+
+		public Feature(IFeaturesStore store)
 		{
-			Key = key;
-			Value = value;
+			Value = (T)store.Get(typeof(T).ToFeatureKey()).Value;
 		}
 	}
 }

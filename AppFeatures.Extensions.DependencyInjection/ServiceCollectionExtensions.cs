@@ -7,21 +7,39 @@ namespace AppFeatures.Extensions.DependencyInjection
 {
 	public static class ServiceCollectionExtensions
 	{
-		public static IServiceCollection AddAppFeatures(this IServiceCollection services, TimeSpan syncInterval, Action<FeaturesBuilder> configure)
+		public static IServiceCollection AddAppFeatures(this IServiceCollection services, TimeSpan syncInterval)
 		{
-			var builder = new FeaturesBuilder();
+			services.AddSingleton<IFeaturesStore, FeaturesStore>();
 
-			services.AddSingleton<IFeaturesBuilder>(builder);
+			services.AddSingleton<IFeaturesManager>(ctx =>
+			{
+				var serviceProvider = ctx.GetRequiredService<IServiceProvider>();
+				var featureBuilders = ctx.GetRequiredService<IEnumerable<IFeatureBuilder>>();
+				var store = ctx.GetRequiredService<IFeaturesStore>();
+				var repository = ctx.GetRequiredService<IFeaturesRepository>();
+				var logger = ctx.GetRequiredService<ILogger<FeaturesManager>>();
 
-			configure(builder);
-
-			var features = builder.BuildFeatures();
-
-			RegisterFeatures(services, features);
-
-			RegisterManager(services, features, syncInterval);
+				return new FeaturesManager(
+					services: serviceProvider,
+					featureBuilders: featureBuilders,
+					store: store,
+					repository: repository,
+					syncInterval: syncInterval,
+					logger: logger);
+			});
 
 			services.AddHostedService<AppFeaturesHostedService>();
+
+			return services;
+		}
+
+		public static IServiceCollection AddFeature<T>(this IServiceCollection services, Func<IServiceProvider, T> factory) where T : notnull
+		{
+			services.AddSingleton<IFeatureBuilder>(new FeatureBuilder<T>(factory));
+
+			services.AddSingleton<IFeature<T>, Feature<T>>();
+
+			services.AddSingleton<IFeatureSnapshot<T>, FeatureSnapshot<T>>();
 
 			return services;
 		}
@@ -31,34 +49,6 @@ namespace AppFeatures.Extensions.DependencyInjection
 			services.AddSingleton<IFeaturesRepository, InMemoryRepository>();
 
 			return services;
-		}
-
-		private static void RegisterManager(IServiceCollection services, IReadOnlyDictionary<string, Feature> features, TimeSpan syncInterval)
-		{
-			services.AddSingleton<IFeaturesManager>(serviceProvider =>
-			{
-				var builder = serviceProvider.GetRequiredService<IFeaturesBuilder>();
-				var repository = serviceProvider.GetRequiredService<IFeaturesRepository>();
-				var logger = serviceProvider.GetRequiredService<ILogger<IFeaturesManager>>();
-
-				return new FeaturesManager(features, repository, builder, syncInterval, logger);
-			});
-		}
-
-		private static void RegisterFeatures(IServiceCollection services, IReadOnlyDictionary<string, Feature> features)
-		{
-			foreach (var feature in features.Values)
-			{
-				var type = feature.Value.GetType();
-				services.AddTransient(type, sericeProvider =>
-				{
-					var builder = sericeProvider.GetRequiredService<IFeaturesBuilder>();
-					var manager = sericeProvider.GetRequiredService<IFeaturesManager>();
-					var key = builder.GetFeatureKey(type);
-					var featureInstance = manager.GetFeature(key);
-					return featureInstance.Value;
-				});
-			}
 		}
 	}
 }

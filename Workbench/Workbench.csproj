@@ -7,13 +7,16 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="AppFeatures" Version="1.0.0" />
-		<PackageReference Include="AppFeatures.Extensions.DependencyInjection" Version="1.0.1" />
-		<PackageReference Include="AppFeatures.Providers.Redis" Version="1.0.0" />
 		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
 		<PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
 		<PackageReference Include="RedisIndexer.Extensions.DependencyInjection" Version="1.0.1" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\AppFeatures.Extensions.DependencyInjection\AppFeatures.Extensions.DependencyInjection.csproj" />
+	  <ProjectReference Include="..\AppFeatures.Providers.Redis\AppFeatures.Providers.Redis.csproj" />
+	  <ProjectReference Include="..\AppFeatures\AppFeatures.csproj" />
 	</ItemGroup>
 
 </Project>
